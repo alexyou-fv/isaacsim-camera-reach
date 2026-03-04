@@ -39,7 +39,6 @@ from . import mdp
 ##
 
 from .ur_with_camera import UR_CAMERA_CFG
-from isaaclab_assets.robots.cartpole import CARTPOLE_CFG  # isort:skip
 
 
 ##
@@ -86,8 +85,6 @@ class ReachWithCamerasSceneCfg(InteractiveSceneCfg):
 
     # Cameras
 
-    # cam_prim_path = "{ENV_REGEX_NS}/Robot/base/front_cam"
-    # sim_utils.create_prim(cam_prim_path)
     camera = CameraCfg(
         prim_path="{ENV_REGEX_NS}/topdowncamera",
         update_period=0.1,
@@ -95,9 +92,9 @@ class ReachWithCamerasSceneCfg(InteractiveSceneCfg):
         width=320,
         data_types=["rgb"],
         spawn=sim_utils.PinholeCameraCfg(
-            focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+            focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 10)
         ),
-        offset=CameraCfg.OffsetCfg(pos=(0.50, 0.0, 2.0), rot=(0.5, 0.70711, 0.0, 0.70711), convention="ros"),
+        offset=CameraCfg.OffsetCfg(pos=(0.50, 0.0, 2.0), rot=(0.0, -0.7071, 0.7071, 0.0), convention="ros"),
     )
 
     # Cube
@@ -145,7 +142,7 @@ class CommandsCfg:
         asset_name="robot",
         body_name="ee_link", # This is the body in the USD file
         resampling_time_range=(4.0, 4.0),
-        debug_vis=True,
+        debug_vis=False,
 # These are essentially ranges of poses that can be commanded for the end of the robot during training
         ranges=mdp.UniformPoseCommandCfg.Ranges(
             pos_x=(0.35, 0.65),
