@@ -6,8 +6,18 @@
 import math
 
 import isaaclab.sim as sim_utils
-from isaaclab.assets import ArticulationCfg, AssetBaseCfg
+from isaaclab.assets import (
+    Articulation,
+    ArticulationCfg,
+    AssetBaseCfg,
+    RigidObject,
+    RigidObjectCfg,
+    RigidObjectCollection,
+    RigidObjectCollectionCfg,
+)
 from isaaclab.envs import ManagerBasedRLEnvCfg
+from isaaclab.managers import ActionTermCfg as ActionTerm
+from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
@@ -16,6 +26,11 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
+from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
+from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg
+from isaaclab.assets.articulation import ArticulationCfg
+from isaaclab.sensors import CameraCfg
+import os
 
 from . import mdp
 
@@ -23,6 +38,7 @@ from . import mdp
 # Pre-defined configs
 ##
 
+from .ur_with_camera import UR_CAMERA_CFG
 from isaaclab_assets.robots.cartpole import CARTPOLE_CFG  # isort:skip
 
 
@@ -31,23 +47,75 @@ from isaaclab_assets.robots.cartpole import CARTPOLE_CFG  # isort:skip
 ##
 
 
+cube_width = 0.06
+
 @configclass
 class ReachWithCamerasSceneCfg(InteractiveSceneCfg):
     """Configuration for a cart-pole scene."""
 
-    # ground plane
+# world
     ground = AssetBaseCfg(
         prim_path="/World/ground",
-        spawn=sim_utils.GroundPlaneCfg(size=(100.0, 100.0)),
+        spawn=sim_utils.GroundPlaneCfg(),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.05)),
     )
 
     # robot
-    robot: ArticulationCfg = CARTPOLE_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = UR_CAMERA_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # lights
     dome_light = AssetBaseCfg(
         prim_path="/World/DomeLight",
-        spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=500.0),
+        spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=5000.0),
+    )
+
+    table = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Table",
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=os.path.expanduser('~/isaacsim-assets/seattlelabtable/table_instanceable.usd'),
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.55, 0.0, 0.0), rot=(0.70711, 0.0, 0.0, 0.70711)),
+    )
+
+    # plane
+    plane = AssetBaseCfg(
+        prim_path="/World/GroundPlane",
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, -1.05]),
+        spawn=sim_utils.GroundPlaneCfg(),
+    )
+
+    # Cameras
+
+    # cam_prim_path = "{ENV_REGEX_NS}/Robot/base/front_cam"
+    # sim_utils.create_prim(cam_prim_path)
+    camera = CameraCfg(
+        prim_path="{ENV_REGEX_NS}/topdowncamera",
+        update_period=0.1,
+        height=240,
+        width=320,
+        data_types=["rgb"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+        ),
+        offset=CameraCfg.OffsetCfg(pos=(0.50, 0.0, 2.0), rot=(0.5, 0.70711, 0.0, 0.70711), convention="ros"),
+    )
+
+    # Cube
+    
+    target_cube = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/cube",
+        spawn=sim_utils.CuboidCfg(
+            size=tuple([cube_width] * 3),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0), metallic=0.2),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                solver_position_iteration_count=4, solver_velocity_iteration_count=0,
+            ),
+            mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.25, 0.0, cube_width / 2)),
+        
     )
 
 
@@ -60,7 +128,34 @@ class ReachWithCamerasSceneCfg(InteractiveSceneCfg):
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_effort = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["slider_to_cart"], scale=100.0)
+    arm_action: ActionTerm = mdp.JointPositionActionCfg(
+        asset_name="robot", 
+        joint_names=["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"], 
+        scale=1, 
+        use_default_offset=True, 
+        debug_vis=True
+    )
+
+
+@configclass
+class CommandsCfg:
+    """Command terms for the MDP."""
+
+    ee_pose = mdp.UniformPoseCommandCfg(
+        asset_name="robot",
+        body_name="ee_link", # This is the body in the USD file
+        resampling_time_range=(4.0, 4.0),
+        debug_vis=True,
+# These are essentially ranges of poses that can be commanded for the end of the robot during training
+        ranges=mdp.UniformPoseCommandCfg.Ranges(
+            pos_x=(0.35, 0.65),
+            pos_y=(-0.2, 0.2),
+            pos_z=(0.15, 0.5),
+            roll=(0.0, 0.0),
+            pitch=(math.pi / 2, math.pi / 2),
+            yaw=(-3.14, 3.14),
+        ),
+    )
 
 
 @configclass
@@ -72,11 +167,13 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
-        joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
+        joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
+        joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
+        pose_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "ee_pose"})
+        actions = ObsTerm(func=mdp.last_action)
 
-        def __post_init__(self) -> None:
-            self.enable_corruption = False
+        def __post_init__(self):
+            self.enable_corruption = True
             self.concatenate_terms = True
 
     # observation groups
@@ -87,25 +184,28 @@ class ObservationsCfg:
 class EventCfg:
     """Configuration for events."""
 
-    # reset
-    reset_cart_position = EventTerm(
+    reset_robot_joints = EventTerm(
         func=mdp.reset_joints_by_offset,
         mode="reset",
         params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]),
-            "position_range": (-1.0, 1.0),
-            "velocity_range": (-0.5, 0.5),
+            "position_range": (0.0, 0.0),
+            "velocity_range": (0.0, 0.0),
         },
     )
 
-    reset_pole_position = EventTerm(
-        func=mdp.reset_joints_by_offset,
-        mode="reset",
+    reset_cube_location = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode='reset',
         params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"]),
-            "position_range": (-0.25 * math.pi, 0.25 * math.pi),
-            "velocity_range": (-0.25 * math.pi, 0.25 * math.pi),
-        },
+            'pose_range': {
+                'x': (0.0, 0.20),
+                'y': (-0.3, 0.3),
+                # 'z': (0, 0.001),
+            },
+            'velocity_range': {},
+            'asset_cfg': SceneEntityCfg('target_cube'),
+        }
+
     )
 
 
@@ -113,46 +213,54 @@ class EventCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
 
-    # (1) Constant running reward
-    alive = RewTerm(func=mdp.is_alive, weight=1.0)
-    # (2) Failure penalty
-    terminating = RewTerm(func=mdp.is_terminated, weight=-2.0)
-    # (3) Primary task: keep pole upright
-    pole_pos = RewTerm(
-        func=mdp.joint_pos_target_l2,
-        weight=-1.0,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"]), "target": 0.0},
+    # We will penalize aliveness to encourage the robot to move to the target as quickly as possible
+    alive = RewTerm(func=mdp.is_alive, weight=-0.1)
+    
+    # Closeness term
+    close_reward = RewTerm(
+        func=mdp.ee_is_close_to_target_cube,
+        weight=1.0,
+        params={'cube_cfg': SceneEntityCfg('target_cube'), 'robot_cfg': SceneEntityCfg('robot')}
+        )
+    
+    # Episode finish term
+    finish_reward = RewTerm(
+        func=mdp.goal_reached_terminate_reward,
+        weight=1.0,
+        params={'cube_cfg': SceneEntityCfg('target_cube'), 'robot_cfg': SceneEntityCfg('robot')}
     )
-    # (4) Shaping tasks: lower cart velocity
-    cart_vel = RewTerm(
-        func=mdp.joint_vel_l1,
-        weight=-0.01,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"])},
-    )
-    # (5) Shaping tasks: lower pole angular velocity
-    pole_vel = RewTerm(
-        func=mdp.joint_vel_l1,
-        weight=-0.005,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"])},
-    )
+
 
 
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
 
-    # (1) Time out
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    # (2) Cart out of bounds
-    cart_out_of_bounds = DoneTerm(
-        func=mdp.joint_pos_out_of_manual_limit,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]), "bounds": (-3.0, 3.0)},
+
+    close = DoneTerm(
+        func=mdp.goal_reached_terminate,
+        params={'cube_cfg': SceneEntityCfg('target_cube'), 'robot_cfg': SceneEntityCfg('robot')}    
     )
+
 
 
 ##
 # Environment configuration
 ##
+
+
+# @configclass
+# class CurriculumCfg:
+#     """Curriculum terms for the MDP."""
+
+#     action_rate = CurrTerm(
+#         func=mdp.modify_reward_weight, params={"term_name": "action_rate", "weight": -0.005, "num_steps": 4500}
+#     )
+
+#     joint_vel = CurrTerm(
+#         func=mdp.modify_reward_weight, params={"term_name": "joint_vel", "weight": -0.001, "num_steps": 4500}
+#     )
 
 
 @configclass
@@ -162,19 +270,21 @@ class ReachWithCamerasEnvCfg(ManagerBasedRLEnvCfg):
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
+    commands: CommandsCfg = CommandsCfg()
     events: EventCfg = EventCfg()
     # MDP settings
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
+    # curriculum = CurriculumCfg()
 
     # Post initialization
     def __post_init__(self) -> None:
         """Post initialization."""
         # general settings
         self.decimation = 2
-        self.episode_length_s = 5
+        self.episode_length_s = 3.0
         # viewer settings
-        self.viewer.eye = (8.0, 0.0, 5.0)
+        self.viewer.eye = (3.5, 3.5, 3.5)
         # simulation settings
-        self.sim.dt = 1 / 120
+        self.sim.dt = 1 / 60
         self.sim.render_interval = self.decimation
