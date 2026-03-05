@@ -1,5 +1,7 @@
 seed: 42
 
+# TEMP BACK UP OF THE CNN BASED METHOD
+
 
 # Models are instantiated using skrl's model instantiator utility
 # https://skrl.readthedocs.io/en/latest/api/utils/model_instantiators.html
@@ -11,10 +13,22 @@ models:
     clip_log_std: True
     min_log_std: -20.0
     max_log_std: 2.0
-    initial_log_std: 0.0
+    initial_log_std: 0.5
     network:
+
+      - name: features_extractor
+        input: permute(STATES['top_camera'], (0, 3, 1, 2))   # NHWC -> NCHW
+        layers:
+          - conv2d: {out_channels: 32, kernel_size: 8, stride: 4, padding: 0}
+          - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
+          - conv2d: {out_channels: 64, kernel_size: 2, stride: 1, padding: 0}
+          - flatten
+          - linear: {out_features: 32}
+          - linear: {out_features: 16}
+        activations: relu
+
       - name: net
-        input: OBSERVATIONS
+        input: concatenate([features_extractor, STATES["joint_pos"], STATES["joint_vel"], STATES["pose_command"], STATES["actions"]])
         layers: [32, 32]
         activations: elu
     output: ACTIONS
@@ -22,8 +36,20 @@ models:
     class: DeterministicMixin
     clip_actions: False
     network:
+
+      - name: features_extractor
+        input: permute(STATES['top_camera'], (0, 3, 1, 2))   # NHWC -> NCHW
+        layers:
+          - conv2d: {out_channels: 32, kernel_size: 8, stride: 4, padding: 0}
+          - conv2d: {out_channels: 64, kernel_size: 4, stride: 2, padding: 0}
+          - conv2d: {out_channels: 64, kernel_size: 2, stride: 1, padding: 0}
+          - flatten
+          - linear: {out_features: 32}
+          - linear: {out_features: 16}
+        activations: relu
+
       - name: net
-        input: OBSERVATIONS
+        input: concatenate([features_extractor, STATES["joint_pos"], STATES["joint_vel"], STATES["pose_command"], STATES["actions"]])
         layers: [32, 32]
         activations: elu
     output: ONE
@@ -66,7 +92,7 @@ agent:
   time_limit_bootstrap: False
   # logging and checkpoint
   experiment:
-    directory: "cartpole_direct"
+    directory: "reach_with_camera_direct"
     experiment_name: ""
     write_interval: auto
     checkpoint_interval: auto

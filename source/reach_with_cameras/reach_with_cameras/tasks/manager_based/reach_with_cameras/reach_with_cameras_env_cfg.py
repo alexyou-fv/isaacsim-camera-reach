@@ -29,7 +29,7 @@ from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg
 from isaaclab.assets.articulation import ArticulationCfg
-from isaaclab.sensors import CameraCfg
+from isaaclab.sensors import CameraCfg, TiledCameraCfg
 import os
 
 from . import mdp
@@ -85,7 +85,7 @@ class ReachWithCamerasSceneCfg(InteractiveSceneCfg):
 
     # Cameras
 
-    camera = CameraCfg(
+    camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/topdowncamera",
         update_period=0.1,
         height=240,
@@ -94,7 +94,7 @@ class ReachWithCamerasSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.PinholeCameraCfg(
             focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 10)
         ),
-        offset=CameraCfg.OffsetCfg(pos=(0.50, 0.0, 2.0), rot=(0.0, -0.7071, 0.7071, 0.0), convention="ros"),
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.50, 0.0, 2.0), rot=(0.0, -0.7071, 0.7071, 0.0), convention="ros"),
     )
 
     # Cube
@@ -168,10 +168,13 @@ class ObservationsCfg:
         joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
         pose_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "ee_pose"})
         actions = ObsTerm(func=mdp.last_action)
+        top_camera = ObsTerm(
+            func=mdp.image, params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "rgb"}
+        )
 
         def __post_init__(self):
             self.enable_corruption = True
-            self.concatenate_terms = True
+            self.concatenate_terms = False
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()
