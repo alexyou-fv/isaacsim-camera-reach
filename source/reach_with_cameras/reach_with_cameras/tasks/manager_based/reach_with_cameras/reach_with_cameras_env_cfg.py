@@ -30,6 +30,7 @@ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg
 from isaaclab.assets.articulation import ArticulationCfg
 from isaaclab.sensors import CameraCfg, TiledCameraCfg
+import torch
 import os
 
 from . import mdp
@@ -94,8 +95,22 @@ class ReachWithCamerasSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.PinholeCameraCfg(
             focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 10)
         ),
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.50, 0.0, 2.0), rot=(0.0, -0.7071, 0.7071, 0.0), convention="ros"),
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.50, 0.0, 2.0), convention="ros"),
     )
+
+    # hand_camera = TiledCameraCfg(
+    #     prim_path="{ENV_REGEX_NS}/Robot/wrist_3_link/hand_camera",
+    #     update_period=0.1,
+    #     height=128,
+    #     width=128,
+    #     data_types=['rgb'],
+    #     spawn=sim_utils.PinholeCameraCfg(
+    #         focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.01, 2)
+
+    #     ),
+    #     offset=TiledCameraCfg.OffsetCfg(pos=(0.0, 0.0, 0.01), rot=(1.0, 0.0, 0.0, 0.0), convention="ros")
+
+    # )
 
     # Cube
     
@@ -198,8 +213,8 @@ class EventCfg:
         mode='reset',
         params={
             'pose_range': {
-                'x': (0.0, 0.20),
-                'y': (-0.3, 0.3),
+                'x': (0.1, 0.30),
+                'y': (-0.35, 0.35),
                 # 'z': (0, 0.001),
             },
             'velocity_range': {},
@@ -214,20 +229,34 @@ class RewardsCfg:
     """Reward terms for the MDP."""
 
     # We will penalize aliveness to encourage the robot to move to the target as quickly as possible
-    alive = RewTerm(func=mdp.is_alive, weight=-0.1)
+    alive = RewTerm(func=mdp.is_alive, weight=-0.2)
     
+    # Want the EE to point down
+    # Make sure the weight doesn't override the alive penalty
+    point_down_reward = RewTerm(
+        func=mdp.ee_pointing_direction,
+        weight=0.2,
+        params={'robot_cfg': SceneEntityCfg('robot'), 'ee_point_axis': 1}
+    )
+
+    too_low_penalty = RewTerm(
+        func=mdp.ee_too_low_indicator,
+        weight=-0.5,
+        params = {'robot_cfg': SceneEntityCfg('robot'), 'z_val': 0.08}
+    )
+
     # Closeness term
     close_reward = RewTerm(
         func=mdp.ee_is_close_to_target_cube,
         weight=1.0,
-        params={'cube_cfg': SceneEntityCfg('target_cube'), 'robot_cfg': SceneEntityCfg('robot')}
-        )
+        params={'cube_cfg': SceneEntityCfg('target_cube'), 'robot_cfg': SceneEntityCfg('robot'), 'dist_threshold': 0.20}
+    )
     
     # Episode finish term
     finish_reward = RewTerm(
         func=mdp.goal_reached_terminate_reward,
         weight=1.0,
-        params={'cube_cfg': SceneEntityCfg('target_cube'), 'robot_cfg': SceneEntityCfg('robot')}
+        params={'cube_cfg': SceneEntityCfg('target_cube'), 'robot_cfg': SceneEntityCfg('robot'), 'reward_coeff': 5.0}
     )
 
 

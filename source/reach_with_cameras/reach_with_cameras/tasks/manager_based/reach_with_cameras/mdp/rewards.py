@@ -11,7 +11,7 @@ import torch
 
 from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
-from isaaclab.utils.math import wrap_to_pi
+from isaaclab.utils.math import wrap_to_pi, quat_apply
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -36,6 +36,25 @@ def get_target_cube_dist(robot, cube, ee_idx: int) -> torch.Tensor:
 
 
 
+def ee_pointing_direction(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, ee_idx: int=7, ee_point_axis=2):
+
+    reference_vector = torch.Tensor([0.0, 0.0, -1.0]).cuda()
+    robot = env.scene[robot_cfg.name]
+    quats = robot.data.body_pose_w[:, ee_idx][:, 3:7]
+    ee_local_vec = torch.zeros((quats.shape[0], 3), device=quats.device)
+    ee_local_vec[:, ee_point_axis] = 1.0
+    return (torch.sum(quat_apply(quats, ee_local_vec) * reference_vector.repeat((quats.shape[0], 1)), axis=1) + 1) / 2
+    
+
+def ee_too_low_indicator(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, z_val: float, ee_idx: int = 7) -> torch.Tensor:
+    
+    robot = env.scene[robot_cfg.name]
+    ee_pos = robot.data.body_pos_w[:, ee_idx]
+    rewards = torch.zeros((ee_pos.shape[0], ), device=ee_pos.device)
+    rewards[ee_pos[:, 2] < z_val] = 1.0
+
+    return rewards
+
 def ee_is_close_to_target_cube(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg,
                                dist_threshold=0.10, max_reward=1.0) -> torch.Tensor:
     
@@ -50,7 +69,7 @@ def ee_is_close_to_target_cube(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg,
 
 
 def goal_reached_terminate(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg,
-                           dist_threshold=0.01):
+                           dist_threshold=0.03):
     
     robot = env.scene[robot_cfg.name]
     cube = env.scene[cube_cfg.name]
@@ -62,7 +81,7 @@ def goal_reached_terminate(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg, rob
 
 
 def goal_reached_terminate_reward(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg,
-                                  dist_threshold=0.01, reward_coeff=2.0) -> torch.Tensor:
+                                  dist_threshold=0.03, reward_coeff=2.0) -> torch.Tensor:
     
     robot = env.scene[robot_cfg.name]
     cube = env.scene[cube_cfg.name]
