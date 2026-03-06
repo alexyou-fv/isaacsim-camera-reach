@@ -13,11 +13,31 @@ from . import agents
 
 
 gym.register(
-    id="Template-Reach-With-Cameras-v0",
+    id="reach-privileged",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.reach_with_cameras_env_cfg:ReachWithCamerasEnvCfg",
-        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
+        "env_cfg_entry_point": f"{__name__}.reach_with_cameras_env_cfg:ReachBaseEnvCfg",
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg_priv.yaml",
+    },
+)
+
+gym.register(
+    id="reach-base",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.reach_with_cameras_env_cfg:ReachBaseEnvCfg",
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg_base.yaml",
+    },
+)
+
+gym.register(
+    id="reach-vision",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.reach_with_cameras_env_cfg:ReachVisionEnvCfg",
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg_vision.yaml",
     },
 )

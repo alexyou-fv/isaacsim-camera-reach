@@ -3,6 +3,16 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
 
+def cube_pos_from_robot(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg, ee_idx: int = 7):
+
+    robot = env.scene[robot_cfg.name]
+    cube = env.scene[cube_cfg.name]
+
+    cube_pos = cube.data.root_pos_w
+    ee_pos = robot.data.body_pos_w[:, ee_idx]
+
+    return cube_pos - ee_pos
+
 
 # def reset_cube_position(
 #     # This function has a bug where it resets all the objects to the world position!

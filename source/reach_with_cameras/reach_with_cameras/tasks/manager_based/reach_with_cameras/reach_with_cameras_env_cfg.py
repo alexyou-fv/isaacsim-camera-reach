@@ -50,10 +50,8 @@ from .ur_with_camera import UR_CAMERA_CFG
 cube_width = 0.06
 
 @configclass
-class ReachWithCamerasSceneCfg(InteractiveSceneCfg):
-    """Configuration for a cart-pole scene."""
+class ReachBaseSceneCfg(InteractiveSceneCfg):
 
-# world
     ground = AssetBaseCfg(
         prim_path="/World/ground",
         spawn=sim_utils.GroundPlaneCfg(),
@@ -84,8 +82,28 @@ class ReachWithCamerasSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.GroundPlaneCfg(),
     )
 
-    # Cameras
+    # Cube
+    target_cube = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/cube",
+        spawn=sim_utils.CuboidCfg(
+            size=tuple([cube_width] * 3),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0), metallic=0.2),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                solver_position_iteration_count=4, solver_velocity_iteration_count=0,
+            ),
+            mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
 
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.25, 0.0, cube_width / 2)),
+        
+    )
+
+
+@configclass
+class ReachVisionSceneCfg(ReachBaseSceneCfg):
+
+    # Cameras
     camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/topdowncamera",
         update_period=0.1,
@@ -112,23 +130,7 @@ class ReachWithCamerasSceneCfg(InteractiveSceneCfg):
 
     # )
 
-    # Cube
-    
-    target_cube = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/cube",
-        spawn=sim_utils.CuboidCfg(
-            size=tuple([cube_width] * 3),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0), metallic=0.2),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                solver_position_iteration_count=4, solver_velocity_iteration_count=0,
-            ),
-            mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
 
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.25, 0.0, cube_width / 2)),
-        
-    )
 
 
 ##
@@ -150,27 +152,6 @@ class ActionsCfg:
 
 
 @configclass
-class CommandsCfg:
-    """Command terms for the MDP."""
-
-    ee_pose = mdp.UniformPoseCommandCfg(
-        asset_name="robot",
-        body_name="ee_link", # This is the body in the USD file
-        resampling_time_range=(4.0, 4.0),
-        debug_vis=False,
-# These are essentially ranges of poses that can be commanded for the end of the robot during training
-        ranges=mdp.UniformPoseCommandCfg.Ranges(
-            pos_x=(0.35, 0.65),
-            pos_y=(-0.2, 0.2),
-            pos_z=(0.15, 0.5),
-            roll=(0.0, 0.0),
-            pitch=(math.pi / 2, math.pi / 2),
-            yaw=(-3.14, 3.14),
-        ),
-    )
-
-
-@configclass
 class ObservationsCfg:
     """Observation specifications for the MDP."""
 
@@ -181,11 +162,29 @@ class ObservationsCfg:
         # observation terms (order preserved)
         joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
         joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
-        pose_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "ee_pose"})
+        actions = ObsTerm(func=mdp.last_action)
+        gt_cube_pos = ObsTerm(func=mdp.cube_pos_from_robot, params={'cube_cfg': SceneEntityCfg('target_cube'), 'robot_cfg': SceneEntityCfg('robot')})
+        def __post_init__(self):
+            self.enable_corruption = True
+            self.concatenate_terms = False
+
+    # observation groups
+    policy: PolicyCfg = PolicyCfg()
+
+
+@configclass
+class ObservationsVisionCfg:
+    
+    @configclass
+    class PolicyCfg(ObsGroup):
+
+        joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))        
+        joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
         actions = ObsTerm(func=mdp.last_action)
         top_camera = ObsTerm(
             func=mdp.image, params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "rgb"}
         )
+        gt_cube_pos = ObsTerm(func=mdp.cube_pos_from_robot, params={'cube_cfg': SceneEntityCfg('target_cube'), 'robot_cfg': SceneEntityCfg('robot')})
 
         def __post_init__(self):
             self.enable_corruption = True
@@ -293,13 +292,38 @@ class TerminationsCfg:
 
 
 @configclass
-class ReachWithCamerasEnvCfg(ManagerBasedRLEnvCfg):
+class ReachBaseEnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
-    scene: ReachWithCamerasSceneCfg = ReachWithCamerasSceneCfg(num_envs=4096, env_spacing=4.0)
+    scene = ReachBaseSceneCfg(num_envs=4096, env_spacing=4.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
-    commands: CommandsCfg = CommandsCfg()
+    events: EventCfg = EventCfg()
+    # MDP settings
+    rewards: RewardsCfg = RewardsCfg()
+    terminations: TerminationsCfg = TerminationsCfg()
+    # curriculum = CurriculumCfg()
+
+    # Post initialization
+    def __post_init__(self) -> None:
+        """Post initialization."""
+        # general settings
+        self.decimation = 2
+        self.episode_length_s = 3.0
+        # viewer settings
+        self.viewer.eye = (3.5, 3.5, 3.5)
+        # simulation settings
+        self.sim.dt = 1 / 60
+        self.sim.render_interval = self.decimation
+
+@configclass
+class ReachVisionEnvCfg(ManagerBasedRLEnvCfg):
+
+    # Scene settings
+    scene = ReachVisionSceneCfg(num_envs=4096, env_spacing=4.0)
+    # Basic settings
+    observations: ObservationsVisionCfg = ObservationsVisionCfg()
+    actions: ActionsCfg = ActionsCfg()
     events: EventCfg = EventCfg()
     # MDP settings
     rewards: RewardsCfg = RewardsCfg()
