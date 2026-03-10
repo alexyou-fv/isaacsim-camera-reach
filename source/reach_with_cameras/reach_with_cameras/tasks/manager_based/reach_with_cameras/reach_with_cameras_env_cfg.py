@@ -29,7 +29,7 @@ from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg
 from isaaclab.assets.articulation import ArticulationCfg
-from isaaclab.sensors import CameraCfg, TiledCameraCfg
+from isaaclab.sensors import CameraCfg, TiledCameraCfg, FrameTransformerCfg
 import torch
 import os
 
@@ -116,21 +116,24 @@ class ReachVisionSceneCfg(ReachBaseSceneCfg):
         offset=TiledCameraCfg.OffsetCfg(pos=(0.50, 0.0, 2.0), convention="ros"),
     )
 
-    # hand_camera = TiledCameraCfg(
-    #     prim_path="{ENV_REGEX_NS}/Robot/wrist_3_link/hand_camera",
-    #     update_period=0.1,
-    #     height=128,
-    #     width=128,
-    #     data_types=['rgb'],
-    #     spawn=sim_utils.PinholeCameraCfg(
-    #         focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.01, 2)
+    hand_camera = CameraCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/ur5e/wrist_3_link/sensors/down_cam",
+        update_period=0.1,
+        height=128,
+        width=128,
+        data_types=['rgb'],
+        update_latest_camera_pose=True,
+        spawn=None,
+    )
 
-    #     ),
-    #     offset=TiledCameraCfg.OffsetCfg(pos=(0.0, 0.0, 0.01), rot=(1.0, 0.0, 0.0, 0.0), convention="ros")
-
+    # camera_pose_tracker = FrameTransformerCfg(
+    #     prim_path="{ENV_REGEX_NS}/Robot/base_link",
+    #     target_frames=[
+    #         FrameTransformerCfg.FrameCfg(prim_path="{ENV_REGEX_NS}/Robot/ee_link"),
+    #         # FrameTransformerCfg.FrameCfg(prim_path="{ENV_REGEX_NS}/Robot/wrist_3_link/hand_camera")
+    #     ],
+    #     debug_vis=False
     # )
-
-
 
 
 ##

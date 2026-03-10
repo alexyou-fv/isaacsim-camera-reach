@@ -18,7 +18,7 @@ UR_CAMERA_CFG = ArticulationCfg(
 
 # Where is the USD file for this robot?
 spawn=sim_utils.UsdFileCfg(       
-    usd_path=os.path.expanduser('~/isaacsim-assets/ur10_instanceable/ur10_instanceable.usd'), 
+    usd_path=os.path.expanduser('~/isaacsim-assets/ur5e-custom-gripper.usd'), 
         activate_contact_sensors=False,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             rigid_body_enabled=True,
@@ -41,6 +41,8 @@ spawn=sim_utils.UsdFileCfg(
             "wrist_1_joint": -0.290,
             "wrist_2_joint": 1.193,
             "wrist_3_joint": 3.148,
+            "gripper_left_joint": 0.0,
+            "gripper_right_joint": 0.0,
         },
     ),
 # What parts of the robot move, and how stiff / damped are they?
