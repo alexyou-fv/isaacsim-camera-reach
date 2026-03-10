@@ -83,6 +83,13 @@ def goal_reached_terminate(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg, rob
 def goal_reached_terminate_reward(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg,
                                   dist_threshold=0.03, reward_coeff=2.0) -> torch.Tensor:
     
+
+    # if not env.common_step_counter % 60:
+
+    #     import cv2        
+    #     data = env.scene.sensors['hand_camera'].data.output['rgb'][0].cpu().numpy()
+    #     cv2.imwrite('test_downcam.png', data)
+
     robot = env.scene[robot_cfg.name]
     cube = env.scene[cube_cfg.name]
     ee_idx = 7
@@ -96,4 +103,3 @@ def goal_reached_terminate_reward(env: ManagerBasedRLEnv, cube_cfg: SceneEntityC
     return reward
     
     
-

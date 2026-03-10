@@ -171,8 +171,15 @@ class ObservationsCfg:
             self.enable_corruption = True
             self.concatenate_terms = False
 
+    class InternalObsCfg(ObsGroup):
+        """
+        These observations are ignored but used to compute the state
+        """
+        ee_stable = ObsTerm(func=mdp.check_stable, params={'robot_cfg': SceneEntityCfg('robot')})
+
     # observation groups
     policy: PolicyCfg = PolicyCfg()
+    internal: InternalObsCfg = InternalObsCfg()
 
 
 @configclass
@@ -244,7 +251,7 @@ class RewardsCfg:
     too_low_penalty = RewTerm(
         func=mdp.ee_too_low_indicator,
         weight=-0.5,
-        params = {'robot_cfg': SceneEntityCfg('robot'), 'z_val': 0.08}
+        params = {'robot_cfg': SceneEntityCfg('robot'), 'z_val': 0.05}
     )
 
     # Closeness term

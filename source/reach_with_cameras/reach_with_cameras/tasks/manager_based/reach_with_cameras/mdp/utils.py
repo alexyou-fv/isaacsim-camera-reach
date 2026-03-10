@@ -3,6 +3,37 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
 
+def check_stable(env: ManagerBasedRLEnv, robot_cfg: SceneEntityCfg, hold_time=1.0, dist_threshold=0.01, ee_idx=7):
+
+    
+
+    cur_info = env.extras.get('ee_pos_queue')
+    
+
+    if cur_info is None:    
+        n = max(int(hold_time / env.step_dt), 1)
+        cur_info = torch.zeros((env.num_envs, n, 3), device=env.device)
+        env.extras['ee_pos_queue'] = cur_info
+    else:
+        n = cur_info.shape[1]
+
+    import ipdb
+    ipdb.set_trace()
+
+    ep_lens = env.episode_length_buf
+    can_check = ep_lens >= n
+    cur_pos = env.scene[robot_cfg.name].data.body_pos_w[:, ee_idx]
+
+    final = torch.zeros((env.num_envs, ), device=env.device)
+    # The logic in ep_lens % n is not correct right now, please verify
+    final[can_check] = torch.norm(cur_pos[can_check] - cur_info[:, ep_lens % n][can_check], dim=1)
+
+    cur_info[ep_lens % n] = cur_pos
+    env.extras['ee_stable'] = final
+
+    return final
+
+
 def cube_pos_from_robot(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg, ee_idx: int = 7):
 
     robot = env.scene[robot_cfg.name]
