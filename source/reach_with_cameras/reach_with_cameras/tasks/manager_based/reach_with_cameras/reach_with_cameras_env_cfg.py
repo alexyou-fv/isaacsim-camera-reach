@@ -176,6 +176,7 @@ class ObservationsCfg:
         These observations are ignored but used to compute the state
         """
         ee_stable = ObsTerm(func=mdp.check_stable, params={'robot_cfg': SceneEntityCfg('robot')})
+        cube_in_fingers = ObsTerm(func=mdp.check_cube_in_fingers, params={'robot_cfg': SceneEntityCfg('robot'), 'cube_cfg': SceneEntityCfg('target_cube')})
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()
@@ -200,8 +201,16 @@ class ObservationsVisionCfg:
             self.enable_corruption = True
             self.concatenate_terms = False
 
+    class InternalObsCfg(ObsGroup):
+        """
+        These observations are ignored but used to compute the state
+        """
+        ee_stable = ObsTerm(func=mdp.check_stable, params={'robot_cfg': SceneEntityCfg('robot')})
+        cube_in_fingers = ObsTerm(func=mdp.check_cube_in_fingers, params={'robot_cfg': SceneEntityCfg('robot'), 'cube_cfg': SceneEntityCfg('target_cube')})
+
     # observation groups
     policy: PolicyCfg = PolicyCfg()
+    internal: InternalObsCfg = InternalObsCfg()
 
 
 @configclass
@@ -248,26 +257,25 @@ class RewardsCfg:
         params={'robot_cfg': SceneEntityCfg('robot'), 'ee_point_axis': 1}
     )
 
-    too_low_penalty = RewTerm(
-        func=mdp.ee_too_low_indicator,
-        weight=-0.5,
-        params = {'robot_cfg': SceneEntityCfg('robot'), 'z_val': 0.05}
-    )
-
     # Closeness term
     close_reward = RewTerm(
         func=mdp.ee_is_close_to_target_cube,
         weight=1.0,
         params={'cube_cfg': SceneEntityCfg('target_cube'), 'robot_cfg': SceneEntityCfg('robot'), 'dist_threshold': 0.20}
     )
+
+    in_fingers_reward = RewTerm(
+        func=mdp.cube_in_between_reward,
+        weight=2.0,
+        params={'max_horiz_dist': 0.03, 'vert_dist_threshold': 0.10},
+    )
     
     # Episode finish term
     finish_reward = RewTerm(
-        func=mdp.goal_reached_terminate_reward,
+        func=mdp.is_stable_reward,
         weight=1.0,
         params={'cube_cfg': SceneEntityCfg('target_cube'), 'robot_cfg': SceneEntityCfg('robot'), 'reward_coeff': 5.0}
     )
-
 
 
 @configclass
@@ -276,11 +284,9 @@ class TerminationsCfg:
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
 
-    close = DoneTerm(
-        func=mdp.goal_reached_terminate,
-        params={'cube_cfg': SceneEntityCfg('target_cube'), 'robot_cfg': SceneEntityCfg('robot')}    
+    stable = DoneTerm(
+        func=mdp.is_stable,
     )
-
 
 
 ##

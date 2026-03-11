@@ -50,7 +50,7 @@ spawn=sim_utils.UsdFileCfg(
         "arm": ImplicitActuatorCfg(
             joint_names_expr=[".*"],
             effort_limit=87.0,
-            stiffness=800.0,
+            stiffness=100.0,
             damping=40.0,
         ),
         # "gripper": ImplicitActuatorCfg(

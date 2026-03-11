@@ -27,12 +27,12 @@ def joint_pos_target_l2(env: ManagerBasedRLEnv, target: float, asset_cfg: SceneE
     return torch.sum(torch.square(joint_pos - target), dim=1)
 
 
-def get_target_cube_dist(robot, cube, ee_idx: int) -> torch.Tensor:
+def get_target_cube_dist(robot, cube, ee_idx: int, cutoff_idx: int = 2) -> torch.Tensor:
 
     cube_pos = cube.data.root_pos_w
     ee_pos = robot.data.body_pos_w[:, ee_idx]
 
-    return torch.norm(ee_pos[:, :2] - cube_pos[:, :2], dim=1)
+    return torch.norm(ee_pos[:, :cutoff_idx] - cube_pos[:, :cutoff_idx], dim=1)
 
 
 
@@ -67,39 +67,34 @@ def ee_is_close_to_target_cube(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg,
 
     return (1 - torch.clamp(dist / dist_threshold, min=0.0, max=1.0)) * max_reward
 
+def is_stable(env: ManagerBasedRLEnv):
+    return env.extras['ee_stable'] > 0.0
 
-def goal_reached_terminate(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg,
-                           dist_threshold=0.03):
+def is_stable_reward(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg,
+                                  dist_threshold=0.05, reward_coeff=2.0) -> torch.Tensor:
     
     robot = env.scene[robot_cfg.name]
     cube = env.scene[cube_cfg.name]
     ee_idx = 7
 
-    dists = get_target_cube_dist(robot, cube, ee_idx=ee_idx)
-    return dists < dist_threshold
-
-
-
-def goal_reached_terminate_reward(env: ManagerBasedRLEnv, cube_cfg: SceneEntityCfg, robot_cfg: SceneEntityCfg,
-                                  dist_threshold=0.03, reward_coeff=2.0) -> torch.Tensor:
-    
-
-    # if not env.common_step_counter % 60:
-
-    #     import cv2        
-    #     data = env.scene.sensors['hand_camera'].data.output['rgb'][0].cpu().numpy()
-    #     cv2.imwrite('test_downcam.png', data)
-
-    robot = env.scene[robot_cfg.name]
-    cube = env.scene[cube_cfg.name]
-    ee_idx = 7
-
-    dists = get_target_cube_dist(robot, cube, ee_idx=ee_idx)
+    dists = get_target_cube_dist(robot, cube, ee_idx=ee_idx, cutoff_idx=3)
     remaining_steps = env.max_episode_length - env.episode_length_buf
     reward = torch.zeros_like(dists)
-    reached_goal = dists < dist_threshold
+    reached_goal = (dists < dist_threshold) & is_stable(env) & env.extras['cube_position']['between']
     reward[reached_goal] = remaining_steps[reached_goal] * reward_coeff
     
     return reward
-    
-    
+
+def cube_in_between_reward(env: ManagerBasedRLEnv, max_horiz_dist: float = 0.02, vert_dist_threshold: float = 0.10):
+
+    info = env.extras['cube_position']
+    in_between = info['between']
+    horiz = info['horizontal']
+    vert = info['vertical']
+
+    reward = torch.clamp(1 - vert / vert_dist_threshold, min=0, max=1)
+    reward[(~in_between) | (horiz > max_horiz_dist)] = 0.0
+
+    return reward
+
+
